@@ -31,26 +31,34 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Create temporary release signing key
+      - name: Check release signing secrets
         shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ROYAL_CRAFT_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ROYAL_CRAFT_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ROYAL_CRAFT_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ROYAL_CRAFT_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_B64" || { echo "Missing ROYAL_CRAFT_KEYSTORE_BASE64 repository secret"; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "Missing ROYAL_CRAFT_STORE_PASSWORD repository secret"; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing ROYAL_CRAFT_KEY_ALIAS repository secret"; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing ROYAL_CRAFT_KEY_PASSWORD repository secret"; exit 1; }
+
+      - name: Restore release signing key
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.ROYAL_CRAFT_KEYSTORE_BASE64 }}
         run: |
           mkdir -p "$RUNNER_TEMP/royalcraft"
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/royalcraft/royalcraft-release.jks" \
-            -storepass "royalcraft-build" \
-            -keypass "royalcraft-build" \
-            -alias "royalcraft" \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Royal Craft Furniture, OU=Royal Craft Furniture, O=Royal Craft Furniture, L=Port Harcourt, ST=Rivers, C=NG"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/royalcraft/royalcraft-release.jks"
+          chmod 600 "$RUNNER_TEMP/royalcraft/royalcraft-release.jks"
 
       - name: Build signed release APK
         env:
           ROYAL_CRAFT_KEYSTORE: ${{ runner.temp }}/royalcraft/royalcraft-release.jks
-          ROYAL_CRAFT_STORE_PASSWORD: royalcraft-build
-          ROYAL_CRAFT_KEY_ALIAS: royalcraft
-          ROYAL_CRAFT_KEY_PASSWORD: royalcraft-build
+          ROYAL_CRAFT_STORE_PASSWORD: ${{ secrets.ROYAL_CRAFT_STORE_PASSWORD }}
+          ROYAL_CRAFT_KEY_ALIAS: ${{ secrets.ROYAL_CRAFT_KEY_ALIAS }}
+          ROYAL_CRAFT_KEY_PASSWORD: ${{ secrets.ROYAL_CRAFT_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace assembleRelease
 
       - name: Verify APK signature
